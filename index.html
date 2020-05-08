@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<!--
+TODO:
+- Titre à tous les graphiques (incluant la carte)
+- Légende des couleurs pour la carte
+-
+-->
+<html lang="fr">
+ <head>
+  <meta charset="utf-8">
+  <title>COVID19 Cartographie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="Ce tutoriel explique comment utiliser le format geoJSON pour représenter la population française par département en ajoutant une échelle et un jeu de couleurs">
+  <meta property="og:locale" content="fr_FR" />
+  <meta property="og:title" content="Carte choroplèthe">
+  <meta property="og:description" content="Ce tutoriel explique comment utiliser le format geoJSON pour représenter la population française par département en ajoutant une échelle et un jeu de couleurs">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.0/css/all.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+  <style>
+	.department {
+		cursor: pointer;
+		stroke: black;
+		stroke-width: .5px;
+	}
+	.department:hover {
+		stroke-width: 1.5px;
+	}
+	svg {
+		margin-top: 20px;
+	}
+	.line {
+		fill: none;
+		stroke-width: 2px;
+	}
+	.linedash {
+		fill: none;
+		stroke-width: 1px;
+		stroke-dasharray: "10 10";
+	}
+  </style>
+ </head>
+ <body>
+  <div class="container-fluid">
+   <div class="row">
+    <div class="col" id=tooltip>
+     <table width=100% style="margin-top: 20px">
+      <tr><th>Département</th><td id=deptno style="text-align: right"></td></tr>
+      <tr><th>Nom</th><td id=deptname style="text-align: right"></td></tr>
+      <tr><th>Mort du covid19</th><td id=covidDeath style="text-align: right"></td></tr>
+      <tr><th>Décès totaux</th><td id=totalDeath style="text-align: right"></td></tr>
+      <tr><th>Tests</th><td id=tests style="text-align: right"></td></tr>
+      <tr><th>Population</th><td id=population style="text-align: right"></td></tr>
+      <tr><th>Proportion de covid19</th><td id=covidRate style="text-align: right"></td></tr>
+      <tr><th>Tests/Population</th><td id=testRate style="text-align: right"></td></tr>
+      <tr><th>Létalité</th><td id=deathRate style="text-align: right"></td></tr>
+     </table>
+     <div id="leftData"></div>
+    </div>
+    <div class="col">
+     <div id="map"></div>
+    </div>
+    <div class="col" id=tooltip>
+     <div id="data"></div>
+    </div>
+  </div>
+   <div class="row">
+    <div class="col">
+    <div style="margin-top: 50px" id="info"><small><b>Cliquez</b> sur un département pour commencer</small></div>
+    </div>
+    <div class="col">
+     <small><h5 style="margin-top: 20px">Credits:</h5>
+     <table>
+      <tr><th>Données décès</th><td style="text-align: right"><a href="https://www.insee.fr/fr/information/4470857">insee.fr</a></td></tr>
+      <tr><th>Données covid19</th><td style="text-align: right"><a href="https://www.data.gouv.fr/fr/datasets/donnees-cartographiques-concernant-lepidemie-de-covid-19/">data.gouv.fr</a></td></tr>
+      <tr><th>Carte</th><td style="text-align: right"><a href="https://github.com/gregoiredavid/france-geojson">Gregoire David</a></td></tr>
+     </table></small>
+    </div>
+  </div>
+</div>
+
+  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+  <script>
+	// Convertisseurs
+	const csvTime = d3.timeParse("%d/%m/%Y");
+	const dbTime  = d3.timeParse("%Y-%m-%d");
+	const nFormat = d3.format(",")
+	const convertCSV = function(input) {
+		var ret = {}
+		input.forEach(function(l) {
+			var z=l.Zone.substr(5)
+			ret[z] = ret[z] || []
+			ret[z].push({
+				date: csvTime(l.Date_evenement),
+				deces_2018: +l.Total_deces_2018,
+				deces_2019: +l.Total_deces_2019,
+				deces_2020: +l.Total_deces_2020
+			})
+		})
+		return ret
+	}
+	const analyze = function(db, dth) {
+		var ret = {}
+		var maxRate = 0
+		Object.keys(db).forEach(function(k) {
+			db[k].forEach(function(i) { i.date = dbTime(i.day) })
+			let d = dth[k][dth[k].length-1]
+			ret[k] = Object.assign({}, db[k][db[k].length-1])
+			ret[k].pop = ret[k].Population.Total
+			delete ret[k].day
+			delete ret[k].Population
+			ret[k]["MedicalTests"] = ret[k]["MedicalTests"] || {}
+			ret[k]["Deaths"] = ret[k]["Deaths"] || 0
+			ret[k].deces_2018 = d.deces_2018
+			ret[k].deces_2019 = d.deces_2019
+			ret[k].deces_2020 = d.deces_2020
+			ret[k].covidRate = Math.round(ret[k].Deaths*100000/ret[k].deces_2020)/1000
+			ret[k].testRate  = Math.round(100000* (ret[k].MedicalTests["Total/Accumulated"] || 0) / ret[k].pop)/1000
+			ret[k].deathRate = Math.round(ret[k].Deaths*100000/ret[k].pop)/1000
+			maxRate = Math.max(maxRate,ret[k].covidRate)
+		})
+		ret.maxRate = maxRate
+		return ret
+	}
+	var setText = function(d, i, maxes) {
+		d3.select('#deptno').html(i);
+		d3.select('#deptname').html(d.properties.nom);
+		d3.select('#covidDeath').html(nFormat(maxes[i].Deaths));
+		d3.select('#totalDeath').html(nFormat(maxes[i].deces_2020));
+		d3.select('#tests').html(nFormat(maxes[i].MedicalTests["Total/Accumulated"] || 0));
+		d3.select('#population').html(nFormat(maxes[i].pop));
+		d3.select('#covidRate').html( maxes[i].covidRate+"%");
+		d3.select('#testRate').html( maxes[i].testRate+"%");
+		d3.select('#deathRate').html(maxes[i].deathRate+"%");
+		d3.select('#info').html("");
+	}
+	// Draw the map svg
+	const mWidth = 600, mHeight = 555;
+	const path = d3.geoPath();
+	const projection = d3.geoConicConformal()
+		.center([2.454071, 46.279229])
+		.scale(3100)
+		.translate([mWidth / 2, mHeight / 2+5]);
+	path.projection(projection);
+	const svgMap = d3.select('#map').append("svg")
+		.attr("width", mWidth)
+		.attr("height", mHeight)
+		.attr("style","background-color:lightblue");
+	const deps = svgMap.append("g");
+	var legend = svgMap.append('g')
+		.attr('transform', 'translate(525, 150)')
+		.attr('id', 'legend');
+
+	// Dessine le 1er graph
+	const margin = {top: 20, right: 20, bottom: 80, left: 40}
+	const dWidth = 600 - margin.left - margin.right, dHeight = 630 - margin.top - margin.bottom, dHeight2 = 370 - margin.top - margin.bottom;
+	const g1 = d3.select('#data').append("svg")
+		.attr("width", dWidth + margin.left + margin.right)
+		.attr("height", dHeight + margin.top + margin.bottom)
+		.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+	var x1			= d3.scaleTime().range([0, dWidth]);
+	var y1			= d3.scaleLinear().range([dHeight, 0]);
+	var x1axis		= d3.axisBottom(x1)
+	var y1axis		= d3.axisLeft(y1)
+	var legendVals1		= ["Confirmé", "Grave", "Guéris", "Morts", "Critiques", "Lits intensifs", "Lits Réa.", "Lits Total"]
+	var color1		= d3.scaleOrdinal(d3.schemeCategory10)
+	var lineDeath		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Deaths); }).curve(d3.curveMonotoneX);
+	var lineRecovered	= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Recovered); }).curve(d3.curveMonotoneX);
+	var lineConfirmed	= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Confirmed); }).curve(d3.curveMonotoneX);
+	var lineSevere		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Severe); }).curve(d3.curveMonotoneX);
+	var lineCritical	= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Critical||0); }).curve(d3.curveMonotoneX);
+	var lineIC		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Beds.IntensiveCare); }).curve(d3.curveMonotoneX);
+	var lineRes		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Beds.Resuscitation); }).curve(d3.curveMonotoneX);
+	var lineBT		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Beds.Total); }).curve(d3.curveMonotoneX);
+	g1.append("g").attr("class", "x axis").attr("transform", "translate(0," + dHeight + ")").call(x1axis);
+	g1.append("g").attr("class", "y axis").call(y1axis);
+	g1.append("path").datum([]).attr("class", "line lineConfirmed").attr('stroke', color1(0)).attr('d', lineConfirmed)
+	g1.append("path").datum([]).attr("class", "line lineSevere")   .attr('stroke', color1(1)).attr('d', lineSevere)
+	g1.append("path").datum([]).attr("class", "line lineRecovered").attr('stroke', color1(2)).attr('d', lineRecovered)
+	g1.append("path").datum([]).attr("class", "line lineDeath")    .attr('stroke', color1(3)).attr('d', lineDeath)
+	g1.append("path").datum([]).attr("class", "line lineCritical") .attr('stroke', color1(4)).attr('d', lineCritical)
+	g1.append("path").datum([]).attr("class", "linedash lineIC")   .attr('stroke', color1(5)).attr('d', lineIC)
+	g1.append("path").datum([]).attr("class", "linedash lineRes")  .attr('stroke', color1(6)).attr('d', lineRes)
+	g1.append("path").datum([]).attr("class", "linedash lineBT")   .attr('stroke', color1(7)).attr('d', lineBT)
+	var data1Update		= function(data) {
+		console.log("data1",data[0],data[40])
+		var t = d3.transition().duration(500)
+		g1.select(".axis.x").transition(t).call(x1axis.scale(x1.domain(d3.extent(data, function(d) { return d.date; }))))
+		g1.select(".axis.y").transition(t).call(y1axis.scale(y1.domain([0, d3.max(data, function(d) { return Math.max(d.Deaths,d.Recovered,d.Confirmed,d.Severe, d.Critical||0); })])))
+		g1.select('.lineDeath').transition(t).attr("d", lineDeath(data))
+		g1.select('.lineCritical').transition(t).attr("d", lineCritical(data))
+		g1.select('.lineRecovered').transition(t).attr("d", lineRecovered(data))
+		g1.select('.lineConfirmed').transition(t).attr("d", lineConfirmed(data))
+		g1.select('.lineSevere').transition(t).attr("d", lineSevere(data))
+		g1.select('.lineIC').transition(t).attr("d", lineIC(data))
+		g1.select('.lineRes').transition(t).attr("d", lineRes(data))
+		g1.select('.lineBT').transition(t).attr("d", lineBT(data))
+	}
+	var offset = 140;
+ 	var g1l = g1.append("g").attr("transform", "translate(-20," + (dHeight+2*margin.top) + ")").attr("font-size", 18)
+		.selectAll('.legends').data(legendVals1).enter().append('g').attr("class", "legends").attr("transform", function (d, i) {
+		return "translate(" + (i%4*(offset)) + ","+(Math.trunc(i/4)*20)+")"
+	})
+	g1l.append('circle').attr("cx", 5).attr("cy", 5).attr("r", 6).each(function(d,i) {
+		if (i<5)
+			d3.select(this).style("fill", color1(i))
+		else
+			d3.select(this).style("stroke", color1(i)).style("stroke-width", 3).style("fill", "none").style("stroke-dasharray","4, 1")
+	})
+	g1l.append('text').attr("x", 20).attr("y", 10).text(function (d, i) { return d })
+
+	// Dessine le 2eme graph
+	const g2 = d3.select('#leftData').append("svg")
+		.attr("width", dWidth + margin.left + margin.right)
+		.attr("height", dHeight2 + margin.top + margin.bottom)
+		.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+	var x2			= d3.scaleTime().range([0, dWidth]);
+	var y2			= d3.scaleLinear().range([dHeight2, 0]);
+	var x2axis		= d3.axisBottom(x2)
+	var y2axis		= d3.axisLeft(y2)
+	var legendVals2		= ["Morts 2018", "Morts 2019", "Morts 2020"]
+	var color2		= d3.scaleOrdinal(d3.schemeAccent)
+	var line2018		= d3.line().x(function(d) { return x2(d.date); }).y(function(d) { return y2(d.deces_2018); }).curve(d3.curveMonotoneX);
+	var line2019		= d3.line().x(function(d) { return x2(d.date); }).y(function(d) { return y2(d.deces_2019); }).curve(d3.curveMonotoneX);
+	var line2020		= d3.line().x(function(d) { return x2(d.date); }).y(function(d) { return y2(d.deces_2020); }).curve(d3.curveMonotoneX);
+	g2.append("g").attr("class", "x axis").attr("transform", "translate(0," + dHeight2 + ")").call(x2axis);
+	g2.append("g").attr("class", "y axis").call(y2axis);
+	g2.append("path").datum([]).attr("class", "line line2018").attr('stroke', color2(0)).attr('d', line2018)
+	g2.append("path").datum([]).attr("class", "line line2019").attr('stroke', color2(1)).attr('d', line2019)
+	g2.append("path").datum([]).attr("class", "line line2020").attr('stroke', color2(2)).attr('d', line2020)
+	var data2Update		= function(data) {
+		console.log("data2",data[0],data[40])
+		var t = d3.transition().duration(500)
+		g2.select(".axis.x").transition(t).call(x2axis.scale(x2.domain(d3.extent(data, function(d) { return d.date; }))))
+		g2.select(".axis.y").transition(t).call(y2axis.scale(y2.domain([0, d3.max(data, function(d) { return Math.max(d.deces_2018,d.deces_2019,d.deces_2020); })])))
+		g2.select('.line2018').transition(t).attr("d", line2018(data))
+		g2.select('.line2019').transition(t).attr("d", line2019(data))
+		g2.select('.line2020').transition(t).attr("d", line2020(data))
+	}
+	dataL = 0; offset = 150;
+ 	var g2l = g2.append("g").attr("transform", "translate(0," + (dHeight2+2*margin.top) + ")").selectAll('.legends').data(legendVals2).enter().append('g').attr("class", "legends").attr("transform", function (d, i) {
+		return "translate(" + (i*(d.length + offset)) + ",0)"
+	})
+	g2l.append('circle').attr("cx", 5).attr("cy", 5).attr("r", 6).style("fill", function (d, i) { return color2(i) })
+	g2l.append('text').attr("x", 20).attr("y", 10).text(function (d, i) { return d })
+
+
+	// Load the data
+	var promises = [];
+	promises.push(d3.json('data/departements-version-simplifiee.geojson'));
+	promises.push(d3.json('data/aggregated.json'));
+	promises.push(d3.csv('data/deces_quotidiens_departement.csv'));
+	Promise.all(promises).then(function(values) {
+		const geojson   = values[0];
+		const dataBase  = values[1];
+		const mortalite = convertCSV(values[2]);
+		const maxes     = analyze(dataBase, mortalite);
+
+		var features = deps.selectAll("path")
+			.data(geojson.features)
+			.enter()
+			.append("path")
+			.attr('id', d => "d" + d.properties.code)
+			.attr("d", path)
+			.attr("class", "department")
+			.attr("fill", "white")
+			.on("click", function(d) {
+				let i = d.properties.code
+				setText(d,i, maxes)
+				data1Update(dataBase[i])
+				data2Update(mortalite[i])
+			})
+			.each(function (d) { d3.select(this).attr("fill",d3.interpolateRdYlGn(1-maxes[d.properties.code].covidRate/maxes.maxRate)) });
+
+
+
+	});
+  </script>
+ </body>
+</html>
