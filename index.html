@@ -11,6 +11,18 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.0/css/all.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
   <style>
+	dt {
+		float: left;
+		clear: left;
+		margin-right: 5px;
+		font-weight: bold;
+	}
+	dt:after {
+		content: ":";
+	}
+	dd {
+		margin-left: 0px;
+	}
 	.department {
 		cursor: pointer;
 		stroke: black;
@@ -146,6 +158,8 @@
 		.attr("width", mWidth)
 		.attr("height", mHeight)
 		.attr("style","background-color:lightblue");
+	const tooltip = d3.select('#map').append("div").style("position","absolute").style("background-color","#777777AA")
+		.style("padding","5px").style("border-radius", "15px").style("width", "300px").style('display', 'none')
 	const deps = svgMap.append("g");
 	const defs = svgMap.append("defs");
 	defs.append("linearGradient").attr("id", "gradient-ryg").attr("x1", "0%").attr("y1", "0%").attr("x2", "0%").attr("y2", "100%")
@@ -193,7 +207,7 @@
 	g1.append("path").datum([]).attr("class", "linedash lineRes")  .attr('stroke', color1(6)).attr('d', lineRes).attr("stroke-dasharray", "10, 5")
 	g1.append("path").datum([]).attr("class", "linedash lineBT")   .attr('stroke', color1(7)).attr('d', lineBT).attr("stroke-dasharray", "10, 5")
 	const tooltip1		= d3.select('#data').append("div").style("position","absolute").style("background-color","#77777777")
-		.style("padding","5px").style("border-radius", "15px").style("width", "150px")
+		.style("padding","5px").style("border-radius", "15px").style("width", "150px").style('display', 'none')
 	const tooltipLine1	= g1.append('line').attr('y1', 0).attr('y2', dHeight).style("stroke-width", 2);
 	var rect1		= g1.append("rect").attr('width', dWidth).attr('height', dHeight).attr('opacity', 0)
 		.on('mousemove', function() {
@@ -264,7 +278,7 @@
 	g2.append("path").datum([]).attr("class", "line line2019").attr('stroke', color2(1)).attr('d', line2019)
 	g2.append("path").datum([]).attr("class", "line line2020").attr('stroke', color2(2)).attr('d', line2020)
 	const tooltip2		= d3.select('#leftData').append("div").style("position","absolute").style("background-color","#77777777")
-		.style("padding","5px").style("border-radius", "15px").style("width", "100px")
+		.style("padding","5px").style("border-radius", "15px").style("width", "100px").style('display', 'none')
 	const tooltipLine2	= g2.append('line').attr('y1', 0).attr('y2', dHeight2).style("stroke-width", 2);
 	var rect2		= g2.append("rect").attr('width', dWidth).attr('height', dHeight2).attr('opacity', 0)
 		.on('mousemove', function() {
@@ -326,6 +340,21 @@
 				setText(d,currentDept, maxes)
 				data1Update(dataBase[currentDept])
 				data2Update(mortalite[currentDept])
+			}).on("mousemove", function(d){
+				let i = d.properties.code
+				tooltip.style('display', 'block').style('left', (d3.event.layerX + 20)+"px").style('top', (d3.event.layerY - 20)+"px").html("")
+				let dl = tooltip.append("dl")
+				dl.append('dt').html("Département")
+				dl.append('dd').html(d.properties.nom)
+				dl.append('dt').html("Lits")
+				dl.append('dd').html(maxes[i].Beds.Total)
+				dl.append('dt').html("Cas graves et critiques")
+				dl.append('dd').html((maxes[i].Severe||0 + maxes[i].Critical||0)+"")
+				dl.append('dt').html("% de covid dans les décès")
+				dl.append('dd').html(maxes[i].covidRate+"%")
+				console.log(maxes[i]);
+			}).on("mouseout", function(){
+				tooltip.style('display', 'none')
 			})
 			//.each(function (d) { d3.select(this).attr("fill",d3.interpolateRdYlGn(1-Math.min(maxes[d.properties.code].occupation/maxes.maxOccupation),1)) });
 			.each(function (d) { d3.select(this).attr("fill",d3.interpolateRdYlGn(1-maxes[d.properties.code].covidRate/maxes.maxRate)) });
