@@ -76,6 +76,7 @@
   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
   <script src="https://d3js.org/d3.v5.min.js"></script>
   <script>
+	var currentDept= null, dataBase, mortalite, maxes;
 	// Convertisseurs
 	const csvTime = d3.timeParse("%d/%m/%Y");
 	const dbTime  = d3.timeParse("%Y-%m-%d");
@@ -132,7 +133,6 @@
 		d3.select('#covidRate').html( maxes[i].covidRate+"%");
 		d3.select('#testRate').html( maxes[i].testRate+"%");
 		d3.select('#deathRate').html(maxes[i].deathRate+"%");
-		d3.select('#info').html("");
 	}
 	// Draw the map svg
 	const mWidth = 600, mHeight = 555;
@@ -192,8 +192,30 @@
 	g1.append("path").datum([]).attr("class", "linedash lineIC")   .attr('stroke', color1(5)).attr('d', lineIC).attr("stroke-dasharray", "10, 5")
 	g1.append("path").datum([]).attr("class", "linedash lineRes")  .attr('stroke', color1(6)).attr('d', lineRes).attr("stroke-dasharray", "10, 5")
 	g1.append("path").datum([]).attr("class", "linedash lineBT")   .attr('stroke', color1(7)).attr('d', lineBT).attr("stroke-dasharray", "10, 5")
+	const tooltip1		= d3.select('#data').append("div").style("position","absolute").style("background-color","#77777777")
+		.style("padding","5px").style("border-radius", "15px").style("width", "150px")
+	const tooltipLine1	= g1.append('line').attr('y1', 0).attr('y2', dHeight).style("stroke-width", 2);
+	var rect1		= g1.append("rect").attr('width', dWidth).attr('height', dHeight).attr('opacity', 0)
+		.on('mousemove', function() {
+			if (currentDept == null) return;var found = null;
+			var date = new Date(Math.round(x1.invert(d3.mouse(rect1.node())[0]).valueOf()/86400000)*86400000)
+			dataBase[currentDept].forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
+			if (found) {
+				tooltipLine1.attr('stroke', '#777').attr('x1', x1(found.date)).attr('x2', x1(found.date));
+				tooltip1.style('display', 'block').style('left', (d3.event.layerX - 170)+"px").style('top', (d3.event.layerY - 20)+"px")
+					.html("Le "+date.getDate()+"/"+(date.getMonth()+1)+"/"+date.getFullYear()+
+						"<br/><b>Confirmé</b>: "+found.Confirmed +
+						"<br/><b>Grave</b>: "+found.Severe +
+						"<br/><b>Critiques</b>: "+(found.Critical||0) +
+						"<br/><b>Guéris</b>: "+found.Recovered +
+						"<br/><b>Morts</b>: "+found.Deaths
+					)
+			}
+		}).on('mouseout', function() {
+			tooltipLine1.attr('stroke', 'none');
+			tooltip1.style('display', 'none');
+		})
 	var data1Update		= function(data) {
-		//console.log("data1",data[0],data[40])
 		var t = d3.transition().duration(500)
 		g1.select(".tmp").remove();
 		g1.select(".axis.x").transition(t).call(x1axis.scale(x1.domain(d3.extent(data, function(d) { return d.date; }))))
@@ -221,7 +243,7 @@
 	g1l.append('text').attr("x", 20).attr("y", 10).text(function (d, i) { return d })
 
 	// Dessine le 2eme graph
-	const g2 = d3.select('#leftData').append("svg")
+	const g2   = d3.select('#leftData').append("svg")
 		.attr("width", dWidth + margin.left + margin.right)
 		.attr("height", dHeight2 + margin.top + margin.bottom)
 		.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
@@ -241,8 +263,24 @@
 	g2.append("path").datum([]).attr("class", "line line2018").attr('stroke', color2(0)).attr('d', line2018)
 	g2.append("path").datum([]).attr("class", "line line2019").attr('stroke', color2(1)).attr('d', line2019)
 	g2.append("path").datum([]).attr("class", "line line2020").attr('stroke', color2(2)).attr('d', line2020)
+	const tooltip2		= d3.select('#leftData').append("div").style("position","absolute").style("background-color","#77777777")
+		.style("padding","5px").style("border-radius", "15px").style("width", "100px")
+	const tooltipLine2	= g2.append('line').attr('y1', 0).attr('y2', dHeight2).style("stroke-width", 2);
+	var rect2		= g2.append("rect").attr('width', dWidth).attr('height', dHeight2).attr('opacity', 0)
+		.on('mousemove', function() {
+			if (currentDept == null) return;var found = null;
+			var date = new Date(Math.round(x2.invert(d3.mouse(rect2.node())[0]).valueOf()/86400000)*86400000)
+			mortalite[currentDept].forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
+			if (found) {
+				tooltipLine2.attr('stroke', '#777').attr('x1', x2(found.date)).attr('x2', x2(found.date));
+				tooltip2.style('display', 'block').style('left', (d3.event.layerX + 20)+"px").style('top', (d3.event.layerY - 20)+"px")
+					.html("Le "+date.getDate()+"/"+(date.getMonth()+1)+"<br/><b>2018</b>: "+found.deces_2018+"<br/><b>2019</b>: "+found.deces_2019+"<br/><b>2020</b>: "+found.deces_2020)
+			}
+		}).on('mouseout', function() {
+			tooltipLine2.attr('stroke', 'none');
+			tooltip2.style('display', 'none');
+		})
 	var data2Update		= function(data) {
-		//console.log("data2",data[0],data[40])
 		var t = d3.transition().duration(500)
 		g2.select(".tmp").remove();
 		g2.select(".axis.x").transition(t).call(x2axis.scale(x2.domain(d3.extent(data, function(d) { return d.date; }))))
@@ -261,17 +299,19 @@
 
 	// Load the data
 	var promises = [];
+	var x = d3.scaleLinear().range([150, 0]);
+	var yaxis;
 	promises.push(d3.json('data/departements-version-simplifiee.geojson'));
 	promises.push(d3.json('data/aggregated.json'));
 	promises.push(d3.csv('data/deces_quotidiens_departement.csv'));
 	Promise.all(promises).then(function(values) {
 		const geojson   = values[0];
-		const dataBase  = values[1];
-		const mortalite = convertCSV(values[2]);
-		const maxes     = analyze(dataBase, mortalite);
+		dataBase	= values[1];
+		mortalite 	= convertCSV(values[2]);
+		maxes     	= analyze(dataBase, mortalite);
 
-		var yaxis	= d3.axisLeft(d3.scaleLinear().range([150, 0]).domain([0, maxes.maxRate]))
-		//var yaxis	= d3.axisLeft(d3.scaleLinear().range([150, 0]).domain([0, maxes.maxOccupation]))
+		yaxis		= d3.axisLeft(x.domain([0, maxes.maxRate]))
+		//yaxis		= d3.axisLeft(x.domain([0, maxes.maxOccupation]))
 		legend.append("g").attr("class", "y axis").call(yaxis);
 		var features = deps.selectAll("path")
 			.data(geojson.features)
@@ -282,10 +322,10 @@
 			.attr("class", "department")
 			.attr("fill", "white")
 			.on("click", function(d) {
-				let i = d.properties.code
-				setText(d,i, maxes)
-				data1Update(dataBase[i])
-				data2Update(mortalite[i])
+				currentDept = d.properties.code
+				setText(d,currentDept, maxes)
+				data1Update(dataBase[currentDept])
+				data2Update(mortalite[currentDept])
 			})
 			//.each(function (d) { d3.select(this).attr("fill",d3.interpolateRdYlGn(1-Math.min(maxes[d.properties.code].occupation/maxes.maxOccupation),1)) });
 			.each(function (d) { d3.select(this).attr("fill",d3.interpolateRdYlGn(1-maxes[d.properties.code].covidRate/maxes.maxRate)) });
