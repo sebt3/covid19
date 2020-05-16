@@ -42,6 +42,32 @@
 		fill: none;
 		stroke-width: 1px;
 	}
+	.radio-toolbar {
+		margin: 10px 5px;
+	}
+	.radio-toolbar input[type="radio"] {
+		opacity: 0;
+		position: fixed;
+		width: 0;
+	}
+	.radio-toolbar label {
+		display: inline-block;
+		background-color: #ddd;
+		padding: 10px 20px;
+		margin-right: 10px;
+		width: 280px;
+		font-family: sans-serif, Arial;
+		font-size: 16px;
+		border: 2px solid #444;
+		border-radius: 4px;
+	}
+	.radio-toolbar label:hover {
+		background-color: #dfd;
+	}
+	.radio-toolbar input[type="radio"]:checked + label {
+		background-color: #bfb;
+		border-color: #4c4;
+	}
   </style>
  </head>
  <body>
@@ -49,6 +75,12 @@
    <div class="row">
     <div class="col">
      <div id="map"></div>
+     <div class="radio-toolbar">
+      <input type="radio" id="deathrate" name="type" value="deathrate" checked><label for="deathrate">Proportion des morts du covid19</label>
+      <input type="radio" id="occupation" name="type" value="occupation"><label for="occupation">Taux d'occupation des lits</label>
+      <input type="radio" id="occuprea" name="type" value="occuprea"><label for="occuprea">Taux d'occupation des lits de réanimation</label>
+      <input type="radio" id="bedpop" name="type" value="bedpop"><label for="bedpop">Nombre de lits par millions d'habitants</label>
+     </div>
     </div>
     <div class="col" id=tooltip>
      <table width=100% style="margin-top: 20px">
@@ -111,6 +143,8 @@
 		var ret = {}
 		var maxRate = 0
 		var maxOccu = 0
+		var maxOccrea = 0
+		var maxBedPop = 0
 		Object.keys(db).forEach(function(k) {
 			db[k].forEach(function(i) { i.date = dbTime(i.day) })
 			let d = dth[k][dth[k].length-1]
@@ -128,11 +162,17 @@
 			ret[k].testRate   = Math.round(100000* (ret[k].MedicalTests["Total/Accumulated"] || 0) / ret[k].pop)/1000
 			ret[k].deathRate  = Math.round(ret[k].Deaths*100000/ret[k].pop)/1000
 			ret[k].occupation = Math.round((ret[k].Severe||0 + ret[k].Critical||0)/(ret[k]["Beds"].Total || 1)*100000)/1000
+			ret[k].occupRea   = Math.round((ret[k].Critical||0)/(ret[k]["Beds"].Resuscitation || 1)*100000)/1000
+			ret[k].bedPop = Math.round((ret[k]["Beds"].Total || 1)*100000000/ret[k].pop)/100
 			maxOccu = Math.max(maxOccu,ret[k].occupation)
+			maxOccrea = Math.max(maxOccrea,ret[k].occupRea)
 			maxRate = Math.max(maxRate,ret[k].covidRate)
+			maxBedPop = Math.max(maxBedPop,ret[k].bedPop)
 		})
 		ret.maxRate = maxRate
 		ret.maxOccupation = Math.min(maxOccu, 300)
+		ret.maxOccupRea = Math.min(maxOccrea,300)
+		ret.maxBedPop = maxBedPop
 		return ret
 	}
 	var setText = function(d, i, maxes) {
@@ -171,7 +211,7 @@
 		.attr('id', 'legend');
 	legend.append("rect").attr("x", 0).attr("y", 0).attr("width", 10).attr("height", 150).style("fill", "url(#gradient-ryg)")
 	svgMap.append("g").attr("class", "title").attr("transform", "translate(160, "+(mHeight-20)+")").attr("text-decoration", "underline")
-		.append('text').text("Proportion des morts du covid19");
+		.append('text').attr('id','title').text("Proportion des morts du covid19");
 
 	// Dessine le 1er graph
 	const margin = {top: 20, right: 20, bottom: 80, left: 40}
@@ -313,7 +353,7 @@
 
 	// Load the data
 	var promises = [];
-	var x = d3.scaleLinear().range([150, 0]);
+	var y = d3.scaleLinear().range([150, 0]);
 	var yaxis;
 	promises.push(d3.json('data/departements-version-simplifiee.geojson'));
 	promises.push(d3.json('data/aggregated.json'));
@@ -324,8 +364,7 @@
 		mortalite 	= convertCSV(values[2]);
 		maxes     	= analyze(dataBase, mortalite);
 
-		yaxis		= d3.axisLeft(x.domain([0, maxes.maxRate]))
-		//yaxis		= d3.axisLeft(x.domain([0, maxes.maxOccupation]))
+		yaxis		= d3.axisLeft(y.domain([0, maxes.maxRate]))
 		legend.append("g").attr("class", "y axis").call(yaxis);
 		var features = deps.selectAll("path")
 			.data(geojson.features)
@@ -346,19 +385,52 @@
 				let dl = tooltip.append("dl")
 				dl.append('dt').html("Département")
 				dl.append('dd').html(d.properties.nom)
+				dl.append('dt').html("Population")
+				dl.append('dd').html(nFormat(maxes[i].pop))
 				dl.append('dt').html("Lits")
 				dl.append('dd').html(maxes[i].Beds.Total)
 				dl.append('dt').html("Cas graves et critiques")
 				dl.append('dd').html((maxes[i].Severe||0 + maxes[i].Critical||0)+"")
 				dl.append('dt').html("% de covid dans les décès")
 				dl.append('dd').html(maxes[i].covidRate+"%")
-				console.log(maxes[i]);
 			}).on("mouseout", function(){
 				tooltip.style('display', 'none')
 			})
-			//.each(function (d) { d3.select(this).attr("fill",d3.interpolateRdYlGn(1-Math.min(maxes[d.properties.code].occupation/maxes.maxOccupation),1)) });
 			.each(function (d) { d3.select(this).attr("fill",d3.interpolateRdYlGn(1-maxes[d.properties.code].covidRate/maxes.maxRate)) });
 	});
+	d3.select("#deathrate").on("click", function(){
+		svgMap.select('#title').text("Proportion des morts du covid19")
+		var t = d3.transition().duration(500)
+		deps.selectAll("path").transition(t).each(function (d) {
+			d3.select(this).attr("fill",d3.interpolateRdYlGn(1-maxes[d.properties.code].covidRate/maxes.maxRate))
+		});
+		legend.select(".axis.y").transition(t).call(yaxis.scale(y.domain([0, maxes.maxRate])))
+	})
+	d3.select("#occupation").on("click", function(){
+		svgMap.select('#title').text("Taux d'occupation des lits")
+		var t = d3.transition().duration(500)
+		deps.selectAll("path").transition(t).each(function (d) {
+			d3.select(this).attr("fill",d3.interpolateRdYlGn(1-Math.min(maxes[d.properties.code].occupation/maxes.maxOccupation),1))
+		});
+		legend.select(".axis.y").transition(t).call(yaxis.scale(y.domain([0, maxes.maxOccupation])))
+	})
+	d3.select("#occuprea").on("click", function(){
+		svgMap.select('#title').text("Taux d'occupation des lits de réanimation")
+		var t = d3.transition().duration(500)
+		deps.selectAll("path").transition(t).each(function (d) {
+			d3.select(this).attr("fill",d3.interpolateRdYlGn(1-Math.min(maxes[d.properties.code].occupRea/maxes.maxOccupRea),1))
+		});
+		legend.select(".axis.y").transition(t).call(yaxis.scale(y.domain([0, maxes.maxOccupRea])))
+	})
+	d3.select("#bedpop").on("click", function(){
+		svgMap.select('#title').text("Nombre de lits par millions d'habitants")
+		var t = d3.transition().duration(500)
+		deps.selectAll("path").transition(t).each(function (d) {
+			d3.select(this).attr("fill",d3.interpolateRdYlGn(Math.min(maxes[d.properties.code].bedPop/maxes.maxBedPop),1))
+		});
+		legend.select(".axis.y").transition(t).call(yaxis.scale(y.domain([maxes.maxBedPop, 0])))
+	})
+
   </script>
  </body>
 </html>
