@@ -121,26 +121,24 @@
   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
   <script src="https://d3js.org/d3.v5.min.js"></script>
   <script>
-	var currentDept= null, dataBase, mortalite, maxes;
+	var currentDept= null, dataBase, mortalite, maxes, aggredb = null, aggremort = null;
 	// Convertisseurs
 	d3.timeFormatDefaultLocale({
-  "dateTime": "%A %e %B %Y à %X",
-  "date": "%d/%m/%Y",
-  "time": "%H:%M:%S",
-  "periods": ["AM", "PM"],
-  "days": ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"],
-  "shortDays": ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."],
-  "months": ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
-  "shortMonths": ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "ao�t", "sept.", "oct.", "nov.", "déc."]
-});
+	  "dateTime": "%A %e %B %Y à %X",
+	  "date": "%d/%m/%Y",
+	  "time": "%H:%M:%S",
+	  "periods": ["AM", "PM"],
+	  "days": ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"],
+	  "shortDays": ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."],
+	  "months": ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
+	  "shortMonths": ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "ao�t", "sept.", "oct.", "nov.", "déc."]
+	});
 	const csvTime = d3.timeParse("%d-%b");
 	const dbTime  = d3.timeParse("%Y-%m-%d");
 	const nFormat = d3.format(",")
 	const convertCSV = function(input) {
 		var ret = {}
 		input.forEach(function(l) {
-			if (csvTime(l.Date_evenement) == null)
-				console.log(l, csvTime(l.Date_evenement))
 			var z=l.Zone.substr(5)
 			ret[z] = ret[z] || []
 			ret[z].push({
@@ -186,6 +184,42 @@
 		ret.maxOccupation = Math.min(maxOccu, 300)
 		ret.maxOccupRea = Math.min(maxOccrea,300)
 		ret.maxBedPop = maxBedPop
+		return ret
+	}
+	const aggregateDB = function(data) {
+		var ret=[]
+		Object.keys(data).forEach(function(k) {
+			if (ret.length==0)
+				ret=data[k]
+			else	data[k].forEach(function(d,i) {
+				if(typeof ret[i]==='undefined') ret[i]={}
+				if(typeof ret[i].Beds==='undefined') ret[i].Beds={}
+				ret[i].Beds.IntensiveCare+=data[k][i].Beds.IntensiveCare||0
+				ret[i].Beds.Resuscitation+=data[k][i].Beds.Resuscitation||0
+				ret[i].Beds.Total+=data[k][i].Beds.Total||0
+				ret[i].Confirmed+=data[k][i].Confirmed||0
+				ret[i].Critical+=data[k][i].Critical||0
+				ret[i].Deaths+=data[k][i].Deaths||0
+				ret[i].Recovered+=data[k][i].Recovered||0
+				ret[i].Severe+=data[k][i].Severe||0
+			})
+		})
+		//console.log("Data",data,ret)
+		return ret
+	}
+	const aggregateDT = function(data) {
+		var ret=[]
+		Object.keys(data).forEach(function(k) {
+			if (ret.length==0)
+				ret=data[k]
+			else	data[k].forEach(function(d,i) {
+				if(typeof ret[i]==='undefined') ret[i]={}
+				ret[i].deces_2020+=data[k][i].deces_2020||0
+				ret[i].deces_2019+=data[k][i].deces_2019||0
+				ret[i].deces_2018+=data[k][i].deces_2018||0
+			})
+		})
+		//console.log("Mort",data,ret)
 		return ret
 	}
 	var setText = function(d, i, maxes) {
@@ -236,7 +270,7 @@
 	var x1			= d3.scaleTime().range([0, dWidth]);
 	var y1			= d3.scaleLinear().range([dHeight, 0]);
 	var x1axis		= d3.axisBottom(x1)
-	var y1axis		= d3.axisLeft(y1)
+	var y1axis		= d3.axisLeft(y1).tickFormat(d3.format("~s"))
 	var legendVals1		= ["Confirmé", "Grave", "Guéris", "Morts", "Critiques", "Lits intensifs", "Lits Réa.", "Lits Total"]
 	var color1		= d3.scaleOrdinal(d3.schemeCategory10)
 	var lineDeath		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Deaths); }).curve(d3.curveMonotoneX);
@@ -247,7 +281,6 @@
 	var lineIC		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Beds.IntensiveCare); }).curve(d3.curveMonotoneX);
 	var lineRes		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Beds.Resuscitation); }).curve(d3.curveMonotoneX);
 	var lineBT		= d3.line().x(function(d) { return x1(d.date); }).y(function(d) { return y1(d.Beds.Total); }).curve(d3.curveMonotoneX);
-	g1.append("g").attr("class", "tmp").attr("transform", "translate(130," + dHeight/2 + ")").append('text').text("Cliquez sur un département pour commencer");
 	g1.append("g").attr("class", "title").attr("transform", "translate(170, -8)").attr("text-decoration", "underline").append('text').text("Contamination Covid19");
 	g1.append("g").attr("class", "x axis").attr("transform", "translate(0," + dHeight + ")").call(x1axis);
 	g1.append("g").attr("class", "y axis").call(y1axis);
@@ -264,9 +297,12 @@
 	const tooltipLine1	= g1.append('line').attr('y1', 0).attr('y2', dHeight).style("stroke-width", 2);
 	var rect1		= g1.append("rect").attr('width', dWidth).attr('height', dHeight).attr('opacity', 0)
 		.on('mousemove', function() {
-			if (currentDept == null) return;var found = null;
+			var found = null;
 			var date = new Date(Math.round(x1.invert(d3.mouse(rect1.node())[0]).valueOf()/86400000)*86400000)
-			dataBase[currentDept].forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
+			if (currentDept != null)
+				dataBase[currentDept].forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
+			else if (aggredb == null) return
+			else	aggredb.forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
 			if (found) {
 				tooltipLine1.attr('stroke', '#777').attr('x1', x1(found.date)).attr('x2', x1(found.date));
 				tooltip1.style('display', 'block').style('left', (d3.event.layerX - 170)+"px").style('top', (d3.event.layerY - 20)+"px")
@@ -284,7 +320,6 @@
 		})
 	var data1Update		= function(data) {
 		var t = d3.transition().duration(500)
-		g1.select(".tmp").remove();
 		g1.select(".axis.x").transition(t).call(x1axis.scale(x1.domain(d3.extent(data, function(d) { return d.date; }))))
 		g1.select(".axis.y").transition(t).call(y1axis.scale(y1.domain([0, d3.max(data, function(d) { return Math.max(d.Deaths,d.Recovered,d.Confirmed,d.Severe, d.Critical||0); })])))
 		g1.select('.lineDeath').transition(t).attr("d", lineDeath(data))
@@ -317,13 +352,12 @@
 	var x2			= d3.scaleTime().range([0, dWidth]);
 	var y2			= d3.scaleLinear().range([dHeight2, 0]);
 	var x2axis		= d3.axisBottom(x2)
-	var y2axis		= d3.axisLeft(y2)
+	var y2axis		= d3.axisLeft(y2).tickFormat(d3.format("~s"))
 	var legendVals2		= ["Morts 2018", "Morts 2019", "Morts 2020"]
 	var color2		= d3.scaleOrdinal(d3.schemeAccent)
 	var line2018		= d3.line().x(function(d) { return x2(d.date); }).y(function(d) { return y2(d.deces_2018); }).curve(d3.curveMonotoneX);
 	var line2019		= d3.line().x(function(d) { return x2(d.date); }).y(function(d) { return y2(d.deces_2019); }).curve(d3.curveMonotoneX);
 	var line2020		= d3.line().x(function(d) { return x2(d.date); }).y(function(d) { return y2(d.deces_2020); }).curve(d3.curveMonotoneX);
-	g2.append("g").attr("class", "tmp").attr("transform", "translate(130," + dHeight2/2 + ")").append('text').text("Cliquez sur un département pour commencer");
 	g2.append("g").attr("class", "title").attr("transform", "translate(140, -8)").attr("text-decoration", "underline").append('text').text("Mortalité cumulée des 3 dernières années");
 	g2.append("g").attr("class", "x axis").attr("transform", "translate(0," + dHeight2 + ")").call(x2axis);
 	g2.append("g").attr("class", "y axis").call(y2axis);
@@ -335,9 +369,12 @@
 	const tooltipLine2	= g2.append('line').attr('y1', 0).attr('y2', dHeight2).style("stroke-width", 2);
 	var rect2		= g2.append("rect").attr('width', dWidth).attr('height', dHeight2).attr('opacity', 0)
 		.on('mousemove', function() {
-			if (currentDept == null) return;var found = null;
+			var found = null;
 			var date = new Date(Math.round(x2.invert(d3.mouse(rect2.node())[0]).valueOf()/86400000)*86400000)
-			mortalite[currentDept].forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
+			if (currentDept != null)
+				mortalite[currentDept].forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
+			else if (aggremort == null) return
+			else	aggremort.forEach(function(i) { if(i.date-date>0 && i.date-date<100000000) found = i; })
 			if (found) {
 				tooltipLine2.attr('stroke', '#777').attr('x1', x2(found.date)).attr('x2', x2(found.date));
 				tooltip2.style('display', 'block').style('left', (d3.event.layerX + 20)+"px").style('top', (d3.event.layerY - 20)+"px")
@@ -349,8 +386,6 @@
 		})
 	var data2Update		= function(data) {
 		var t = d3.transition().duration(500)
-	        //console.log(data,line2018(data),line2019(data),line2020(data))
-		g2.select(".tmp").remove();
 		g2.select(".axis.x").transition(t).call(x2axis.scale(x2.domain(d3.extent(data, function(d) { return d.date; }))))
 		g2.select(".axis.y").transition(t).call(y2axis.scale(y2.domain([0, d3.max(data, function(d) { return Math.max(d.deces_2018,d.deces_2019,d.deces_2020); })])))
 		g2.select('.line2018').transition(t).attr("d", line2018(data))
@@ -377,9 +412,13 @@
 		dataBase	= values[1];
 		mortalite 	= convertCSV(values[2]);
 		maxes     	= analyze(dataBase, mortalite);
+		aggredb		= aggregateDB(dataBase);
+		aggremort	= aggregateDT(mortalite);
 
 		yaxis		= d3.axisLeft(y.domain([0, maxes.maxRate]))
 		legend.append("g").attr("class", "y axis").call(yaxis);
+		data1Update(aggredb)
+		data2Update(aggremort)
 		var features = deps.selectAll("path")
 			.data(geojson.features)
 			.enter()
