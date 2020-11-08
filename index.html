@@ -123,12 +123,24 @@
   <script>
 	var currentDept= null, dataBase, mortalite, maxes;
 	// Convertisseurs
-	const csvTime = d3.timeParse("%d/%m/%Y");
+	d3.timeFormatDefaultLocale({
+  "dateTime": "%A %e %B %Y à %X",
+  "date": "%d/%m/%Y",
+  "time": "%H:%M:%S",
+  "periods": ["AM", "PM"],
+  "days": ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"],
+  "shortDays": ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."],
+  "months": ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"],
+  "shortMonths": ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "ao�t", "sept.", "oct.", "nov.", "déc."]
+});
+	const csvTime = d3.timeParse("%d-%b");
 	const dbTime  = d3.timeParse("%Y-%m-%d");
 	const nFormat = d3.format(",")
 	const convertCSV = function(input) {
 		var ret = {}
 		input.forEach(function(l) {
+			if (csvTime(l.Date_evenement) == null)
+				console.log(l, csvTime(l.Date_evenement))
 			var z=l.Zone.substr(5)
 			ret[z] = ret[z] || []
 			ret[z].push({
@@ -337,6 +349,7 @@
 		})
 	var data2Update		= function(data) {
 		var t = d3.transition().duration(500)
+	        //console.log(data,line2018(data),line2019(data),line2020(data))
 		g2.select(".tmp").remove();
 		g2.select(".axis.x").transition(t).call(x2axis.scale(x2.domain(d3.extent(data, function(d) { return d.date; }))))
 		g2.select(".axis.y").transition(t).call(y2axis.scale(y2.domain([0, d3.max(data, function(d) { return Math.max(d.deces_2018,d.deces_2019,d.deces_2020); })])))
